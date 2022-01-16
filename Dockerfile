@@ -44,7 +44,8 @@ RUN apt-get update && apt-get install -y \
   v4l-utils \
   xz-utils \
   zlib1g-dev \
-  x265
+  x265 \
+  libpq-dev
 
 # unpack s6
 COPY --from=s6build /tmp /tmp
@@ -59,6 +60,7 @@ RUN	curl -fsSLO --compressed --retry 3 --retry-delay 10 \
 
 WORKDIR /opt/octoprint
 RUN pip install .
+RUN pip install psycopg2
 RUN mkdir -p /octoprint/octoprint /octoprint/plugins
 
 # Install mjpg-streamer
