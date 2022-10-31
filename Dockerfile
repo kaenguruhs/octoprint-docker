@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y \
   imagemagick \
   ffmpeg \
   fontconfig \
+  gcc \
   g++ \
   git \
   haproxy \
@@ -62,6 +63,8 @@ RUN	curl -fsSLO --compressed --retry 3 --retry-delay 10 \
 WORKDIR /opt/octoprint
 RUN pip install .
 RUN pip install psycopg2
+RUN pip install "jinja2<3.1.0" --force-reinstall
+RUN pip install "itsdangerous==2.0.1"
 RUN mkdir -p /octoprint/octoprint /octoprint/plugins
 
 # Install mjpg-streamer
