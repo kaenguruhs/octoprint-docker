@@ -1,0 +1,2 @@
+#!/command/with-contenv sh
+exec haproxy -p /tmp/haproxy.pid -f /etc/haproxy/haproxy.cfg -db

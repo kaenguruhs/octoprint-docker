@@ -1,0 +1,22 @@
+#!/command/with-contenv sh
+
+# Wenn die Variable nicht "true" ist, beende das Skript sofort (Dienst startet nicht)
+if [ "$ENABLE_MJPG_STREAMER" != "true" ]; then
+  echo "mjpg-streamer is disabled via ENABLE_MJPG_STREAMER."
+  # s6-svc -d stoppt den Dienst permanent, damit er nicht alle 1 Sekunde neu startet
+  s6-svc -d /run/service/mjpg-streamer
+  exit 0
+fi
+
+if [ -n "$MJPEG_STREAMER_INPUT" ]; then
+  echo "Deprecation warning: the environment variable '\$MJPEG_STREAMER_INPUT' was renamed to '\$MJPG_STREAMER_INPUT'"
+  MJPG_STREAMER_INPUT=$MJPEG_STREAMER_INPUT
+fi
+
+if ! expr "$MJPG_STREAMER_INPUT" : ".*\.so.*" > /dev/null; then
+  MJPG_STREAMER_INPUT="input_uvc.so $MJPG_STREAMER_INPUT"
+fi
+
+exec mjpg_streamer \
+  -i "/usr/local/lib/mjpg-streamer/$MJPG_STREAMER_INPUT -d $CAMERA_DEV" \
+  -o "/usr/local/lib/mjpg-streamer/output_http.so -w /usr/local/share/mjpg-streamer/www -p 8080"

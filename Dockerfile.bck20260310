@@ -15,6 +15,7 @@ RUN ARCH= && dpkgArch="$(dpkg --print-architecture)" \
   *) echo "unsupported architecture: $(dpkg --print-architecture)"; exit 1 ;; \
   esac \
   && set -ex \
+  # Wir speichern die Dateien unter festen Namen, um Wildcard-Fehler zu vermeiden
   && curl -fsSL "https://github.com/just-containers/s6-overlay/releases/download/$S6_VERSION/s6-overlay-noarch.tar.xz" -o s6-noarch.tar.xz \
   && curl -fsSL "https://github.com/just-containers/s6-overlay/releases/download/$S6_VERSION/s6-overlay-$ARCH.tar.xz" -o s6-arch.tar.xz
 
@@ -24,46 +25,30 @@ FROM python:${PYTHON_BASE_IMAGE} AS build
 ARG octoprint_ref
 ENV octoprint_ref=${octoprint_ref:-master}
 
-# System-Abhängigkeiten (alles in einem Schritt, um Layer klein zu halten)
+# System-Abhängigkeiten
 RUN apt-get update && apt-get install -y --no-install-recommends \
   avrdude build-essential cmake curl imagemagick ffmpeg fontconfig \
   gcc g++ git haproxy libffi-dev libjpeg-dev libjpeg62-turbo \
   libprotobuf-dev libudev-dev libusb-1.0-0-dev libv4l-dev \
   openssh-client v4l-utils xz-utils zlib1g-dev x265 libpq-dev \
-  swig python3-dev pkg-config make unzip ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# S6 Overlay installieren
+# S6 Overlay installieren - Jetzt mit expliziten Namen und sauberer Syntax
 COPY --from=s6build /tmp/s6-noarch.tar.xz /tmp/
 COPY --from=s6build /tmp/s6-arch.tar.xz /tmp/
 RUN tar -xf /tmp/s6-noarch.tar.xz -C / \
   && tar -xf /tmp/s6-arch.tar.xz -C / \
   && rm /tmp/s6-*.tar.xz
 
-# Build und Install der nativen liblgpio (lg)
-WORKDIR /tmp
-RUN git clone --depth 1 https://github.com/joan2937/lg.git /tmp/lg \
- && cd /tmp/lg \
- && make \
- && make install \
- && ldconfig \
- && rm -rf /tmp/lg
-
-# Jetzt rpi-lgpio (Python wrapper) installieren - native lib ist jetzt vorhanden
-RUN pip install --no-cache-dir rpi-lgpio
-
-# Install OctoPrint (source)
-WORKDIR /opt
-RUN curl -fsSLO --compressed --retry 3 --retry-delay 10 \
+# Install octoprint
+RUN	curl -fsSLO --compressed --retry 3 --retry-delay 10 \
   https://github.com/OctoPrint/OctoPrint/archive/${octoprint_ref}.tar.gz \
-  && mkdir -p /opt/octoprint \
+	&& mkdir -p /opt/octoprint \
   && tar xzf ${octoprint_ref}.tar.gz --strip-components 1 -C /opt/octoprint --no-same-owner \
   && rm ${octoprint_ref}.tar.gz
 
 WORKDIR /opt/octoprint
 RUN pip install --no-cache-dir . psycopg2
-
-# Prepare runtime directories used by your original file structure
 RUN mkdir -p /octoprint/octoprint /octoprint/plugins
 
 # Install mjpg-streamer
@@ -73,14 +58,20 @@ RUN curl -fsSLO --compressed --retry 3 --retry-delay 10 \
 WORKDIR /mjpg/mjpg-streamer-master/mjpg-streamer-experimental
 RUN make && make install
 
-# Copy prepared services and configuration into image (dein "root/" Verzeichnis)
+# Kopiere die vorbereiteten Services und Konfigurationen ins Image
 COPY root /
 
-# Berechtigungen für S6 v3 setzen + remove CRLF
+# Berechtigungen für S6 v3 setzen
+#RUN find /etc/s6-overlay/s6-rc.d/ -type f -exec sed -i 's/\r$//' {} + && \
+#    find /etc/cont-init.d/ -type f -exec sed -i 's/\r$//' {} + && \
+#    chmod +x /etc/cont-init.d/* && \
+#    chmod -R +x /etc/s6-overlay/s6-rc.d/*/run
+
+# Berechtigungen sicherstellen und Windows-Zeilenumbrüche entfernen
 RUN find /etc/s6-overlay/s6-rc.d/ -type f -exec sed -i 's/\r$//' {} + && \
     chmod -R +x /etc/s6-overlay/s6-rc.d/*/run
 
-# Umgebungsvariablen (wie in deinem Original)
+# Umgebungsvariablen
 ENV CAMERA_DEV=/dev/video0 \
     MJPG_STREAMER_INPUT="-n -r 640x480" \
     PIP_USER=true \
